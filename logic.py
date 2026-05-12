@@ -4,10 +4,6 @@ import random
 import math
 from data import SLABS_DATA, ARTIFACTS_DATA
 
-# ──────────────────────────────────────────────
-# 빌드 우선순위 / 스탯 파싱 및 타격형 아티팩트 정의
-# ──────────────────────────────────────────────
-
 ALL_STATS = [
     '치명타 확률', '얼음속성 피해', '공격 속도', '회피', '물리 피해',
     '화염속성 피해', '번개속성 피해', '치명타 피해', '방어력', '이동 속도',
@@ -166,37 +162,70 @@ def get_offs(name, r, c, rot, rows, cols, locked=None):
     actual_rot = 0 if s.get('nr') else rot
     ignore_flag = s.get('ignore_type', False)
     
-    max_r = rows - 1
-    if locked is not None:
-        unlocked_rows = [i for i in range(rows) if not all(locked[i])]
-        if unlocked_rows: max_r = max(unlocked_rows)
-    
     res = []
     
     if off_type == 'row': 
-        res = [{'dr': 0, 'dc': nc - c, 'val': s['v']} for nc in range(cols) if nc != c]
+        res = [{'dr': 0, 'dc': nc - c, 'val': s.get('v', 1)} for nc in range(cols) if nc != c]
     elif off_type in ('col', 'col_all'): 
         res = [{'dr': nr - r, 'dc': 0, 'val': 1} for nr in range(rows) if nr != r]
+    
     elif off_type == 'bottom_row': 
-        res = [{'dr': max_r - r, 'dc': nc - c, 'val': 1} for nc in range(cols)]
-    elif off_type == 'diag_right':
-        for d in range(1, max(rows, cols)):
-            if r - d >= 0 and c + d < cols: res.append({'dr': -d, 'dc': d, 'val': 1})
-            if r + d < rows and c - d >= 0: res.append({'dr': d, 'dc': -d, 'val': 1})
+        for nc in range(cols):
+            col_max_r = rows - 1
+            if locked is not None:
+                unlocked_in_col = [i for i in range(rows) if not locked[i, nc]]
+                if unlocked_in_col:
+                    col_max_r = max(unlocked_in_col)
+            res.append({'dr': col_max_r - r, 'dc': nc - c, 'val': 1})
+            
     elif off_type == 'border_rows':
         for nc in range(cols):
-            res.append({'dr': -r, 'dc': nc - c, 'val': 1})
-            res.append({'dr': max_r - r, 'dc': nc - c, 'val': 1})
-    elif off_type == 'cross_pm':
-        res = [{'dr': 0, 'dc': nc - c, 'val': 1} for nc in range(cols) if nc != c]
-        res += [{'dr': nr - r, 'dc': 0, 'val': -1} for nr in range(rows) if nr != r]
+            col_min_r = 0
+            col_max_r = rows - 1
+            if locked is not None:
+                unlocked_in_col = [i for i in range(rows) if not locked[i, nc]]
+                if unlocked_in_col:
+                    col_min_r = min(unlocked_in_col)
+                    col_max_r = max(unlocked_in_col)
+            
+            res.append({'dr': col_min_r - r, 'dc': nc - c, 'val': 1})
+            if col_min_r != col_max_r:
+                res.append({'dr': col_max_r - r, 'dc': nc - c, 'val': 1})
+                
+    # ── [핵심 수정] 반항, 전이, 응집에 회전 각도(actual_rot) 로직 적용 ──
+    elif off_type == 'diag_right': # 반항 석판
+        for d in range(1, max(rows, cols)):
+            if actual_rot % 2 == 0: # 기본, 180도: / 방향 (우상단, 좌하단)
+                if r - d >= 0 and c + d < cols: res.append({'dr': -d, 'dc': d, 'val': 1})
+                if r + d < rows and c - d >= 0: res.append({'dr': d, 'dc': -d, 'val': 1})
+            else: # 90도, 270도: \ 방향 (좌상단, 우하단)
+                if r - d >= 0 and c - d >= 0: res.append({'dr': -d, 'dc': -d, 'val': 1})
+                if r + d < rows and c + d < cols: res.append({'dr': d, 'dc': d, 'val': 1})
+                
+    elif off_type == 'cross_pm': # 전이 석판
+        if actual_rot % 2 == 0: # 기본, 180도: 가로줄은 +1, 세로줄은 -1
+            res = [{'dr': 0, 'dc': nc - c, 'val': 1} for nc in range(cols) if nc != c]
+            res += [{'dr': nr - r, 'dc': 0, 'val': -1} for nr in range(rows) if nr != r]
+        else: # 90도, 270도: 가로줄은 -1, 세로줄은 +1
+            res = [{'dr': 0, 'dc': nc - c, 'val': -1} for nc in range(cols) if nc != c]
+            res += [{'dr': nr - r, 'dc': 0, 'val': 1} for nr in range(rows) if nr != r]
+            
     elif off_type == 'cross_all':
         res = [{'dr': 0, 'dc': nc - c, 'val': 1} for nc in range(cols) if nc != c]
         res += [{'dr': nr - r, 'dc': 0, 'val': 1} for nr in range(rows) if nr != r]
-    elif off_type == 'row_minus_up3':
-        res = [{'dr': 0, 'dc': nc - c, 'val': -1} for nc in range(cols) if nc != c]
-        if r - 1 >= 0: res.append({'dr': -1, 'dc': 0, 'val': 3})
         
+    elif off_type == 'row_minus_up3': # 응집 석판
+        if actual_rot % 2 == 0:
+            # 0도: 가로줄 -1, 위쪽 1칸 +3 / 180도: 가로줄 -1, 아래쪽 1칸 +3
+            res = [{'dr': 0, 'dc': nc - c, 'val': -1} for nc in range(cols) if nc != c]
+            target_r = r - 1 if actual_rot == 0 else r + 1
+            if 0 <= target_r < rows: res.append({'dr': target_r - r, 'dc': 0, 'val': 3})
+        else:
+            # 90도: 세로줄 -1, 오른쪽 1칸 +3 / 270도: 세로줄 -1, 왼쪽 1칸 +3
+            res = [{'dr': nr - r, 'dc': 0, 'val': -1} for nr in range(rows) if nr != r]
+            target_c = c + 1 if actual_rot == 1 else c - 1
+            if 0 <= target_c < cols: res.append({'dr': 0, 'dc': target_c - c, 'val': 3})
+            
     elif off_type == 'row_and_ud2':
         if actual_rot % 2 == 0:
             res = [{'dr': 0, 'dc': nc - c, 'val': 1} for nc in range(cols) if nc != c]
@@ -249,17 +278,15 @@ def get_tooltip_data(name, r, c, rows, cols, locked=None, calges_mapping=None, i
     cond = item_data.get('cond')
     
     if cond and not is_ignored:
-        min_r, max_r, min_c, max_c = 0, rows - 1, 0, cols - 1
-        if locked is not None:
-            unlocked_rows = [i for i in range(rows) if not all(locked[i])]
-            unlocked_cols = [j for j in range(cols) if not all(locked[:, j])]
-            if unlocked_rows: min_r, max_r = min(unlocked_rows), max(unlocked_rows)
-            if unlocked_cols: min_c, max_c = min(unlocked_cols), max(unlocked_cols)
+        col_min_r = min([i for i in range(rows) if not locked[i, c]], default=0)
+        col_max_r = max([i for i in range(rows) if not locked[i, c]], default=rows-1)
+        row_min_c = min([j for j in range(cols) if not locked[r, j]], default=0)
+        row_max_c = max([j for j in range(cols) if not locked[r, j]], default=cols-1)
 
-        if cond == 'bottom' and r != max_r: desc_lines.append("⚠ 최하단 행에만 배치 가능")
-        if cond == 'top' and r != min_r: desc_lines.append("⚠ 최상단 행에만 배치 가능")
-        if cond == 'edge' and (c != min_c and c != max_c): desc_lines.append("⚠ 좌끝 또는 우끝 열에만 배치 가능")
-        if cond == 'inside' and (r == min_r or r == max_r or c == min_c or c == max_c): desc_lines.append("⚠ 인벤토리 안쪽에만 배치 가능")
+        if cond == 'bottom' and r != col_max_r: desc_lines.append("⚠ 해당 열의 최하단에만 배치 가능")
+        if cond == 'top' and r != col_min_r: desc_lines.append("⚠ 해당 열의 최상단에만 배치 가능")
+        if cond == 'edge' and (c != row_min_c and c != row_max_c): desc_lines.append("⚠ 해당 행의 좌/우 끝에만 배치 가능")
+        if cond == 'inside' and (r == col_min_r or r == col_max_r or c == row_min_c or c == row_max_c): desc_lines.append("⚠ 가장자리를 제외한 안쪽에만 배치 가능")
         if cond == 'both_empty':
             left_empty = (c == 0 or (grid_data is not None and not grid_data[r][c-1]))
             right_empty = (c == cols-1 or (grid_data is not None and not grid_data[r][c+1]))
@@ -280,6 +307,7 @@ def get_tooltip_data(name, r, c, rows, cols, locked=None, calges_mapping=None, i
                         has_telescope = True
                         break
             if has_telescope: break
+            
         if has_telescope:
             desc_lines.append("🔭 [거대 망원경 적용됨] 투사체 거대화 및 피해량 +50% 증가!")
 
@@ -345,12 +373,6 @@ def calculate_active_combos(grid_data, rows, cols, combos_data, artifacts_data, 
 def evaluate_state(grid, rotations, current_levels, mystery_buffs, locked, rows, cols, build_priorities=None):
     score = 0
     penalty = 0
-    
-    unlocked_rows = [i for i in range(rows) if not all(locked[i])]
-    unlocked_cols = [j for j in range(cols) if not all(locked[:, j])]
-    if not unlocked_rows or not unlocked_cols: return 0
-    min_r, max_r = min(unlocked_rows), max(unlocked_rows)
-    min_c, max_c = min(unlocked_cols), max(unlocked_cols)
 
     slab_buffs = [[0]*cols for _ in range(rows)]
     ignored_cells = set()
@@ -375,27 +397,30 @@ def evaluate_state(grid, rotations, current_levels, mystery_buffs, locked, rows,
             
             is_ignored = (r, c) in ignored_cells
             
+            col_min_r = min([i for i in range(rows) if not locked[i, c]], default=0)
+            col_max_r = max([i for i in range(rows) if not locked[i, c]], default=rows-1)
+            row_min_c = min([j for j in range(cols) if not locked[r, j]], default=0)
+            row_max_c = max([j for j in range(cols) if not locked[r, j]], default=cols-1)
+
             if val in SLABS_DATA:
                 cond = SLABS_DATA[val].get('cond')
                 if cond and not is_ignored:
-                    if cond == 'bottom' and r != max_r: penalty += 1
-                    elif cond == 'top' and r != min_r: penalty += 1
-                    elif cond == 'edge' and (c != min_c and c != max_c): penalty += 1
-                    elif cond == 'inside' and (r == min_r or r == max_r or c == min_c or c == max_c): penalty += 1
+                    if cond == 'bottom' and r != col_max_r: penalty += 1
+                    elif cond == 'top' and r != col_min_r: penalty += 1
+                    elif cond == 'edge' and (c != row_min_c and c != row_max_c): penalty += 1
+                    elif cond == 'inside' and (r == col_min_r or r == col_max_r or c == row_min_c or c == row_max_c): penalty += 1
                     elif cond == 'both_empty':
                         left_empty = (c == 0 or not grid[r, c-1])
                         right_empty = (c == cols-1 or not grid[r, c+1])
                         if not (left_empty and right_empty): penalty += 1
                     
             elif val in ARTIFACTS_DATA:
-                # [수정됨] 신비 버프 여부에 따라 2배만 적용되도록 수정
                 myst_val = mystery_buffs[r, c]
                 myst_mult = 2 if myst_val > 0 else 1
                 
                 base_lv = int(current_levels[r][c]) + slab_buffs[r][c]
-                total_lv = base_lv * myst_mult  # 2배 곱연산
+                total_lv = base_lv * myst_mult  
                 
-                # 아티팩트의 최종 레벨을 점수에 반영
                 score += total_lv
                 
                 if build_priorities:
@@ -416,10 +441,10 @@ def evaluate_state(grid, rotations, current_levels, mystery_buffs, locked, rows,
                 
                 cond = ARTIFACTS_DATA[val].get('cond')
                 if cond and not is_ignored:
-                    if cond == 'bottom' and r != max_r: penalty += 1
-                    elif cond == 'top' and r != min_r: penalty += 1
-                    elif cond == 'edge' and (c != min_c and c != max_c): penalty += 1
-                    elif cond == 'inside' and (r == min_r or r == max_r or c == min_c or c == max_c): penalty += 1
+                    if cond == 'bottom' and r != col_max_r: penalty += 1
+                    elif cond == 'top' and r != col_min_r: penalty += 1
+                    elif cond == 'edge' and (c != row_min_c and c != row_max_c): penalty += 1
+                    elif cond == 'inside' and (r == col_min_r or r == col_max_r or c == row_min_c or c == row_max_c): penalty += 1
                     elif cond == 'both_empty':
                         left_empty = (c == 0 or not grid[r, c-1])
                         right_empty = (c == cols-1 or not grid[r, c+1])

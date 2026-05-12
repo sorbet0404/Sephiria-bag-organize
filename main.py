@@ -10,13 +10,12 @@ import logic
 
 PIXEL_FONT = "DungGeunMo" 
 
-# --- 럭셔리 다크+골드 팔레트 ---
-THEME_BG = "#0f0f11"           # 최하단 배경 (매우 어두운 검정)
-THEME_PANEL = "#1a1a1e"        # 패널 배경 (다크 그레이)
-THEME_GOLD = "#d4af37"         # 메탈릭 골드 (메인 포인트)
-THEME_GOLD_HOVER = "#b48c26"   # 어두운 골드 (호버)
-THEME_TEXT_WHITE = "#f3f4f6"   # 밝은 텍스트
-THEME_TEXT_MUTED = "#9ca3af"   # 어두운 텍스트
+THEME_BG = "#0f0f11"           
+THEME_PANEL = "#1a1a1e"        
+THEME_GOLD = "#d4af37"         
+THEME_GOLD_HOVER = "#b48c26"   
+THEME_TEXT_WHITE = "#f3f4f6"   
+THEME_TEXT_MUTED = "#9ca3af"   
 
 GRADE_COLORS = {
     '일반': '#e5e7eb',
@@ -27,22 +26,29 @@ GRADE_COLORS = {
     '결속': '#4ade80'
 }
 
+GRADE_ORDER = {
+    '일반': 0,
+    '고급': 1,
+    '희귀': 2,
+    '전설': 3,
+    '결속': 4,
+    '영원': 5
+}
+
 class ToolTip:
     def __init__(self, widget):
         self.widget = widget
         self.tipwindow = None
 
-    def show(self, title, combo_text, desc_text, grade_text, flavor_text, grade, level):
+    def show(self, x, y, title, combo_text, desc_text, grade_text, flavor_text, grade, level):
         if self.tipwindow: return
-        x = self.widget.winfo_rootx() + 85
-        y = self.widget.winfo_rooty() + 10
         self.tipwindow = tw = tk.Toplevel(self.widget)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
         
-        outer_frame = tk.Frame(tw, background=THEME_GOLD, padx=2, pady=2) # 골드 테두리
+        outer_frame = tk.Frame(tw, background=THEME_GOLD, padx=2, pady=2)
         outer_frame.pack()
-        inner_frame = tk.Frame(outer_frame, background="#222226", padx=12, pady=12) # 다크 배경
+        inner_frame = tk.Frame(outer_frame, background="#222226", padx=12, pady=12)
         inner_frame.pack()
 
         title_color = GRADE_COLORS.get(grade, THEME_GOLD)
@@ -92,6 +98,7 @@ class ToolTip:
             self.tipwindow.destroy()
             self.tipwindow = None
 
+
 class SephiriaOptimizer(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -133,7 +140,6 @@ class SephiriaOptimizer(ctk.CTk):
         self.bind_all("<KeyRelease>", self.handle_key_all)
 
     def setup_ui(self):
-        # 최상위 레이아웃: Row 0 (툴바), Row 1 (콘텐츠 영역)
         self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -143,14 +149,11 @@ class SephiriaOptimizer(ctk.CTk):
         self.topbar.grid(row=0, column=0, sticky="ew")
         self.topbar.grid_propagate(False)
 
-        # 타이틀
         title_label = ctk.CTkLabel(self.topbar, text="SEPHIRIA OPTIMIZER v2", text_color=THEME_GOLD, font=ctk.CTkFont(family=PIXEL_FONT, size=24, weight="bold"))
         title_label.pack(side="left", padx=20, pady=10)
 
-        # 도구 구분선
         ctk.CTkFrame(self.topbar, width=2, height=40, fg_color="#333333").pack(side="left", padx=10)
 
-        # 도구 버튼 그룹
         tool_frame = ctk.CTkFrame(self.topbar, fg_color="transparent")
         tool_frame.pack(side="left", padx=10, fill="y", pady=15)
 
@@ -168,40 +171,36 @@ class SephiriaOptimizer(ctk.CTk):
         create_tool_btn("erase", "지우기", "🗑️")
         self.update_tool_buttons_ui()
 
-        # 최적화 실행 버튼 (우측)
         self.btn_run = ctk.CTkButton(self.topbar, text="✨ 자동 배치 최적화", width=180, height=45, 
                                      fg_color=THEME_GOLD, hover_color=THEME_GOLD_HOVER, text_color="#000000",
                                      font=ctk.CTkFont(family=PIXEL_FONT, size=15, weight="bold"), command=self.run_optimization)
         self.btn_run.pack(side="right", padx=20, pady=10)
 
-        # ─── 콘텐츠 영역 (하단 레이아웃) ───
+        # ─── 콘텐츠 영역 ───
         self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.content_frame.grid(row=1, column=0, sticky="nsew")
         self.content_frame.grid_rowconfigure(0, weight=1)
-        self.content_frame.grid_columnconfigure(0, weight=0, minsize=320) # 사이드바
-        self.content_frame.grid_columnconfigure(1, weight=1)              # 메인 그리드
+        self.content_frame.grid_columnconfigure(0, weight=0, minsize=320)
+        self.content_frame.grid_columnconfigure(1, weight=1)
 
-        # ─── 왼쪽 사이드바 (Left Sidebar) ───
+        # ─── 왼쪽 사이드바 ───
         self.sidebar = ctk.CTkFrame(self.content_frame, width=320, corner_radius=0, fg_color=THEME_PANEL)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
 
-        # 검색바
         search_entry = ctk.CTkEntry(self.sidebar, textvariable=self.search_var, placeholder_text="🔍 아이템 이름 검색...", 
                                     font=ctk.CTkFont(family=PIXEL_FONT, size=13), height=40,
                                     fg_color="#222226", border_color=THEME_GOLD, text_color=THEME_TEXT_WHITE)
         search_entry.pack(pady=(20, 10), padx=15, fill="x")
 
-        # 상태/안내 라벨
         self.rot_label = ctk.CTkLabel(self.sidebar, text="선택: 없음", text_color=THEME_GOLD, font=ctk.CTkFont(family=PIXEL_FONT, size=13, weight="bold"))
         self.rot_label.pack(pady=(0, 2))
         self.warn_label = ctk.CTkLabel(self.sidebar, text="단축키: [E] 레벨 업  [Q] 레벨 다운  [R] 회전", text_color=THEME_TEXT_MUTED, font=ctk.CTkFont(family=PIXEL_FONT, size=11))
         self.warn_label.pack(pady=(0, 15))
 
-        # 탭뷰
         self.tabview = ctk.CTkTabview(self.sidebar, fg_color="#222226", segmented_button_fg_color="#1a1a1e",
                                       segmented_button_selected_color=THEME_GOLD, segmented_button_selected_hover_color=THEME_GOLD_HOVER,
                                       segmented_button_unselected_color="#2b2b31", segmented_button_unselected_hover_color="#3f3f46",
-                                      text_color="#000000") # 선택된 탭 텍스트는 검정으로 대비
+                                      text_color="#000000")
         self.tabview.pack(pady=5, padx=15, fill="both", expand=True)
         
         self.tabview.add("석판")
@@ -213,7 +212,9 @@ class SephiriaOptimizer(ctk.CTk):
         # 석판 탭
         self.slab_filter_menu = ctk.CTkOptionMenu(self.tabview.tab("석판"), values=["전체", "일반", "고급", "희귀", "전설", "영원"], 
                                                   font=ctk.CTkFont(family=PIXEL_FONT, size=12), fg_color="#2b2b31", button_color=THEME_GOLD, button_hover_color=THEME_GOLD_HOVER, command=self.update_slab_list)
+        self.slab_filter_menu.set("전체")
         self.slab_filter_menu.pack(pady=5, fill="x")
+        
         slab_container = ctk.CTkFrame(self.tabview.tab("석판"), fg_color="#121215", corner_radius=6, border_width=1, border_color="#333333")
         slab_container.pack(fill="both", expand=True, pady=5)
         self.slab_scroll = ctk.CTkScrollbar(slab_container, button_color=THEME_GOLD, button_hover_color=THEME_GOLD_HOVER)
@@ -227,10 +228,15 @@ class SephiriaOptimizer(ctk.CTk):
         # 아티팩트 탭
         self.art_filter_frame = ctk.CTkFrame(self.tabview.tab("아티팩트"), fg_color="transparent")
         self.art_filter_frame.pack(fill="x", pady=5)
+        
         self.art_combo_menu = ctk.CTkOptionMenu(self.art_filter_frame, values=["콤보 전체"] + SET_NAMES, font=ctk.CTkFont(family=PIXEL_FONT, size=11), fg_color="#2b2b31", button_color=THEME_GOLD, button_hover_color=THEME_GOLD_HOVER, command=self.update_art_list)
+        self.art_combo_menu.set("콤보 전체") 
         self.art_combo_menu.pack(side="left", fill="x", expand=True, padx=(0, 2))
-        self.art_grade_menu = ctk.CTkOptionMenu(self.art_filter_frame, values=["등급 전체", "일반", "고급", "희귀", "전설", "영원", "결속", "무소속"], font=ctk.CTkFont(family=PIXEL_FONT, size=11), fg_color="#2b2b31", button_color=THEME_GOLD, button_hover_color=THEME_GOLD_HOVER, command=self.update_art_list)
+        
+        self.art_grade_menu = ctk.CTkOptionMenu(self.art_filter_frame, values=["등급 전체", "일반", "고급", "희귀", "전설", "결속", "무소속"], font=ctk.CTkFont(family=PIXEL_FONT, size=11), fg_color="#2b2b31", button_color=THEME_GOLD, button_hover_color=THEME_GOLD_HOVER, command=self.update_art_list)
+        self.art_grade_menu.set("등급 전체")
         self.art_grade_menu.pack(side="right", fill="x", expand=True, padx=(2, 0))
+        
         art_container = ctk.CTkFrame(self.tabview.tab("아티팩트"), fg_color="#121215", corner_radius=6, border_width=1, border_color="#333333")
         art_container.pack(fill="both", expand=True, pady=5)
         self.art_scroll = ctk.CTkScrollbar(art_container, button_color=THEME_GOLD, button_hover_color=THEME_GOLD_HOVER)
@@ -282,7 +288,7 @@ class SephiriaOptimizer(ctk.CTk):
         self.update_slab_list()
         self.update_art_list()
 
-        # ─── 메인 그리드 (Right Main Area) ───
+        # ─── 메인 그리드 ───
         self.main_wrapper = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         self.main_wrapper.grid(row=0, column=1, sticky="nsew", padx=30, pady=30)
         
@@ -290,6 +296,7 @@ class SephiriaOptimizer(ctk.CTk):
         self.main_frame.pack(expand=True)
         
         self.grid_cells = []
+        self.grid_frames = [] 
         self.tooltips = {}
         self.create_inventory_ui()
 
@@ -303,9 +310,9 @@ class SephiriaOptimizer(ctk.CTk):
     def update_tool_buttons_ui(self):
         for name, btn in self.tool_buttons.items():
             if name == self.current_tool:
-                btn.configure(fg_color=THEME_GOLD, text_color="#000000") # 활성화 상태 (골드 배경, 검정 글씨)
+                btn.configure(fg_color=THEME_GOLD, text_color="#000000") 
             else:
-                btn.configure(fg_color="#2b2b31", text_color=THEME_TEXT_WHITE) # 비활성화 상태
+                btn.configure(fg_color="#2b2b31", text_color=THEME_TEXT_WHITE)
 
     def update_build_priority(self, rank, val):
         self.build_priorities[rank] = val
@@ -362,9 +369,20 @@ class SephiriaOptimizer(ctk.CTk):
         filter_grade = self.slab_filter_menu.get()
         search_kw = self.search_var.get().lower()
         self.slab_listbox.delete(0, tk.END)
+        
+        filtered = []
         for slab_name, slab_info in SLABS_DATA.items():
-            if (filter_grade == "전체" or slab_info.get('g') == filter_grade) and (search_kw in slab_name.lower()):
-                self.slab_listbox.insert(tk.END, slab_name)
+            grade = slab_info.get('g', '일반')
+            if (filter_grade == "전체" or grade == filter_grade) and (search_kw in slab_name.lower()):
+                filtered.append((slab_name, slab_info))
+                
+        filtered.sort(key=lambda x: (GRADE_ORDER.get(x[1].get('g', '일반'), 99), x[0]))
+
+        for slab_name, slab_info in filtered:
+            self.slab_listbox.insert(tk.END, slab_name)
+            grade = slab_info.get('g', '일반')
+            color = GRADE_COLORS.get(grade, GRADE_COLORS['일반'])
+            self.slab_listbox.itemconfig(tk.END, {'fg': color})
 
     def update_art_list(self, _=None):
         sel_combo = self.art_combo_menu.get()
@@ -372,6 +390,8 @@ class SephiriaOptimizer(ctk.CTk):
         search_kw = self.search_var.get().lower()
         
         self.art_listbox.delete(0, tk.END)
+        
+        filtered = []
         for art_name, art_info in ARTIFACTS_DATA.items():
             match_combo = (sel_combo == "콤보 전체")
             if not match_combo:
@@ -380,10 +400,22 @@ class SephiriaOptimizer(ctk.CTk):
                 elif not art_sets and 'set' in art_info: art_sets = [art_info['set']]
                 if sel_combo in art_sets: match_combo = True
 
-            match_grade = (sel_grade == "등급 전체" or art_info.get('g') == sel_grade)
+            grade = art_info.get('g', '일반')
+            match_grade = (sel_grade == "등급 전체" or grade == sel_grade)
+            
+            if sel_grade == "무소속":
+                match_grade = ("무소속" in art_info.get('sets', []))
 
             if match_combo and match_grade and (search_kw in art_name.lower()):
-                self.art_listbox.insert(tk.END, art_name)
+                filtered.append((art_name, art_info))
+                
+        filtered.sort(key=lambda x: (GRADE_ORDER.get(x[1].get('g', '일반'), 99), x[0]))
+
+        for art_name, art_info in filtered:
+            self.art_listbox.insert(tk.END, art_name)
+            grade = art_info.get('g', '일반')
+            color = GRADE_COLORS.get(grade, GRADE_COLORS['일반'])
+            self.art_listbox.itemconfig(tk.END, {'fg': color})
 
     def on_tab_change(self):
         tab = self.tabview.get()
@@ -397,7 +429,6 @@ class SephiriaOptimizer(ctk.CTk):
 
     def select_item(self, item_type, item_name):
         self.current_tool = item_type
-        # 리스트에서 선택 시 상단 툴바 활성화 해제 시각적 처리
         for btn in self.tool_buttons.values(): btn.configure(fg_color="#2b2b31", text_color=THEME_TEXT_WHITE)
         self.pending_item = item_name
         self.pending_rot = 0
@@ -460,7 +491,11 @@ class SephiriaOptimizer(ctk.CTk):
         self.update_grid_ui()
 
     def on_motion(self, e, r, c):
-        if not self.drag_start or self.current_tool != "select": return
+        if not self.drag_start or self.current_tool != "select":
+            if hasattr(self, 'tooltips') and (r, c) in self.tooltips and self.tooltips[(r, c)].tipwindow:
+                self.tooltips[(r, c)].tipwindow.wm_geometry(f"+{e.x_root + 15}+{e.y_root + 15}")
+            return
+
         if not self.is_dragging:
             self.is_dragging = True
             val = self.grid_data[r, c]
@@ -506,7 +541,7 @@ class SephiriaOptimizer(ctk.CTk):
                 myst_val = self.mystery_buffs[r, c]
                 myst_mult = 2 if myst_val > 0 else 1
                 total_level = (self.levels[r, c] + self.scores[r, c]) * myst_mult
-                self.tooltips[(r, c)].show(*tt_data, total_level)
+                self.tooltips[(r, c)].show(e.x_root + 15, e.y_root + 15, *tt_data, total_level)
 
     def on_leave(self, e, r, c):
         self.tooltips[(r, c)].hide()
@@ -552,7 +587,7 @@ class SephiriaOptimizer(ctk.CTk):
                         myst_val = self.mystery_buffs[r, c]
                         myst_mult = 2 if myst_val > 0 else 1
                         total_level = (self.levels[r, c] + self.scores[r, c]) * myst_mult
-                        self.tooltips[(r, c)].show(*tt_data, total_level)
+                        self.tooltips[(r, c)].show(e.x_root + 15, e.y_root + 15, *tt_data, total_level)
                         
         elif is_q:
             if self.selected_cell:
@@ -569,7 +604,7 @@ class SephiriaOptimizer(ctk.CTk):
                         myst_val = self.mystery_buffs[r, c]
                         myst_mult = 2 if myst_val > 0 else 1
                         total_level = (self.levels[r, c] + self.scores[r, c]) * myst_mult
-                        self.tooltips[(r, c)].show(*tt_data, total_level)
+                        self.tooltips[(r, c)].show(e.x_root + 15, e.y_root + 15, *tt_data, total_level)
         elif is_esc:
             self.set_tool("select")
             self.selected_cell = None
@@ -597,12 +632,11 @@ class SephiriaOptimizer(ctk.CTk):
             self.rot_label.configure(text="선택된 항목: 없음")
 
     def create_inventory_ui(self):
-        self.grid_frames = [] # 셀 테두리를 조작하기 위해 Frame을 저장
+        self.grid_frames = [] 
         for r in range(self.rows):
             row_cells = []
             row_frames = []
             for c in range(self.cols):
-                # 프레임에 테두리(border)를 설정할 수 있도록 셋업
                 cell_frame = ctk.CTkFrame(self.main_frame, width=80, height=80, corner_radius=8, fg_color="transparent")
                 cell_frame.grid(row=r, column=c, padx=4, pady=4)
                 cell_frame.grid_propagate(False)
@@ -617,7 +651,7 @@ class SephiriaOptimizer(ctk.CTk):
                 self.tooltips[(r, c)] = ToolTip(lbl)
                 
                 row_cells.append(lbl)
-                row_frames.append(cell_frame) # 프레임 저장
+                row_frames.append(cell_frame)
             self.grid_cells.append(row_cells)
             self.grid_frames.append(row_frames)
         self.update_grid_ui()
@@ -657,7 +691,7 @@ class SephiriaOptimizer(ctk.CTk):
         for r in range(self.rows):
             for c in range(self.cols):
                 lbl = self.grid_cells[r][c]
-                frame = self.grid_frames[r][c] # 셀을 감싸는 프레임
+                frame = self.grid_frames[r][c] 
                 is_locked = self.locked[r, c]
                 val = self.grid_data[r, c]
                 score = self.scores[r, c]
@@ -668,36 +702,50 @@ class SephiriaOptimizer(ctk.CTk):
                 
                 is_selected = (self.selected_cell == (r, c))
                 is_ignored = (r, c) in self.ignored_cells
+                
+                # ── [핵심 수정 4] UI 경고 조건 판별 시 굴곡진 윤곽선 적용 ──
+                col_min_r = min([i for i in range(self.rows) if not self.locked[i, c]], default=0)
+                col_max_r = max([i for i in range(self.rows) if not self.locked[i, c]], default=self.rows-1)
+                row_min_c = min([j for j in range(self.cols) if not self.locked[r, j]], default=0)
+                row_max_c = max([j for j in range(self.cols) if not self.locked[r, j]], default=self.cols-1)
 
-                # 셀 색상 톤다운 럭셔리 매칭
                 if is_locked:
                     lbl.configure(text="", fg_color="#121215", text_color="#333333") 
                 elif val in ARTIFACTS_DATA:
                     total_level = (self.levels[r, c] + score) * myst_mult
-                    tt_data = logic.get_tooltip_data(val, r, c, self.rows, self.cols, self.locked, self.calges_mapping, is_ignored, self.grid_data)
                     lvl_str = f" [Lv.{total_level}]" if total_level != 0 else ""
                     
-                    if tt_data and "⚠" in tt_data[2] and not is_ignored:
+                    cond_msg = None
+                    cond = ARTIFACTS_DATA[val].get('cond')
+                    if cond and not is_ignored:
+                        if cond == 'bottom' and r != col_max_r: cond_msg = "error"
+                        if cond == 'top' and r != col_min_r: cond_msg = "error"
+                        if cond == 'edge' and (c != row_min_c and c != row_max_c): cond_msg = "error"
+                        if cond == 'inside' and (r == col_min_r or r == col_max_r or c == row_min_c or c == row_max_c): cond_msg = "error"
+                        if cond == 'both_empty':
+                            left_empty = (c == 0 or not self.grid_data[r, c-1])
+                            right_empty = (c == self.cols-1 or not self.grid_data[r, c+1])
+                            if not (left_empty and right_empty): cond_msg = "error"
+                    
+                    if cond_msg:
                         lbl.configure(text=f"⚠\n{myst_prefix}{val}", fg_color="#7f1d1d", text_color="#fca5a5")
-                    elif is_ignored and ARTIFACTS_DATA[val].get('cond'):
+                    elif is_ignored and cond:
                         lbl.configure(text=f"✅제약무시\n{myst_prefix}{val}{lvl_str}", fg_color="#172554", text_color="#93c5fd")
                     else:
                         lbl.configure(text=f"{myst_prefix}{val}{lvl_str}", fg_color="#172554", text_color="#93c5fd")
+                        
                 elif val in SLABS_DATA:
                     rot_str = f"{self.rotations[r,c]*90}°"
                     cond_msg = None
                     s = SLABS_DATA[val]
                     if s.get('cond') and not is_ignored:
-                        unlocked_rows = [i for i in range(self.rows) if not all(self.locked[i])]
-                        if unlocked_rows:
-                            min_r, max_r = min(unlocked_rows), max(unlocked_rows)
-                            if s['cond'] == 'bottom' and r != max_r: cond_msg = "error"
-                            if s['cond'] == 'top' and r != min_r: cond_msg = "error"
-                            if s['cond'] == 'edge' and (c != 0 and c != self.cols-1): cond_msg = "error"
-                            if s['cond'] == 'both_empty':
-                                left_empty = (c == 0 or not self.grid_data[r, c-1])
-                                right_empty = (c == self.cols-1 or not self.grid_data[r, c+1])
-                                if not (left_empty and right_empty): cond_msg = "error"
+                        if s['cond'] == 'bottom' and r != col_max_r: cond_msg = "error"
+                        if s['cond'] == 'top' and r != col_min_r: cond_msg = "error"
+                        if s['cond'] == 'edge' and (c != row_min_c and c != row_max_c): cond_msg = "error"
+                        if s['cond'] == 'both_empty':
+                            left_empty = (c == 0 or not self.grid_data[r, c-1])
+                            right_empty = (c == self.cols-1 or not self.grid_data[r, c+1])
+                            if not (left_empty and right_empty): cond_msg = "error"
                     
                     if cond_msg:
                         lbl.configure(text=f"⚠\n{myst_prefix}{val}", fg_color="#7f1d1d", text_color="#fca5a5")
@@ -710,11 +758,11 @@ class SephiriaOptimizer(ctk.CTk):
                     else:
                         lbl.configure(text=score_str, fg_color="#222226", text_color=THEME_TEXT_MUTED)
                 
-                # 선택 시 테두리 (border_width)는 Label이 아닌 Frame에 적용
                 if is_selected:
                     frame.configure(border_width=2, border_color=THEME_GOLD)
                 else:
                     frame.configure(border_width=0)
+
 if __name__ == "__main__":
     app = SephiriaOptimizer()
     app.mainloop()
