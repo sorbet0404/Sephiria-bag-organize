@@ -534,13 +534,16 @@ class SephiriaOptimizer(ctk.CTk):
 
     def on_enter(self, e, r, c):
         val = self.grid_data[r, c]
-        if val in ARTIFACTS_DATA:
+        if val in ARTIFACTS_DATA or val in SLABS_DATA:
             is_ignored = (r, c) in self.ignored_cells
             tt_data = logic.get_tooltip_data(val, r, c, self.rows, self.cols, self.locked, self.calges_mapping, is_ignored, self.grid_data)
             if tt_data: 
                 myst_val = self.mystery_buffs[r, c]
                 myst_mult = 2 if myst_val > 0 else 1
-                total_level = (self.levels[r, c] + self.scores[r, c]) * myst_mult
+                if val in ARTIFACTS_DATA:
+                    total_level = (self.levels[r, c] + self.scores[r, c]) * myst_mult
+                else:
+                    total_level = 0
                 self.tooltips[(r, c)].show(e.x_root + 15, e.y_root + 15, *tt_data, total_level)
 
     def on_leave(self, e, r, c):
@@ -569,6 +572,12 @@ class SephiriaOptimizer(ctk.CTk):
                         self.rotations[r, c] = (self.rotations[r, c] + 1) % 4
                         self.update_rot_label()
                         self.update_grid_ui()
+                        
+                        self.tooltips[(r, c)].hide()
+                        is_ignored = (r, c) in self.ignored_cells
+                        tt_data = logic.get_tooltip_data(val, r, c, self.rows, self.cols, self.locked, self.calges_mapping, is_ignored, self.grid_data)
+                        if tt_data:
+                            self.tooltips[(r, c)].show(e.x_root + 15, e.y_root + 15, *tt_data, 0)
                         
         elif is_e:
             if self.selected_cell:
@@ -702,52 +711,25 @@ class SephiriaOptimizer(ctk.CTk):
                 
                 is_selected = (self.selected_cell == (r, c))
                 is_ignored = (r, c) in self.ignored_cells
-                
-                # ── [핵심 수정 4] UI 경고 조건 판별 시 굴곡진 윤곽선 적용 ──
-                col_min_r = min([i for i in range(self.rows) if not self.locked[i, c]], default=0)
-                col_max_r = max([i for i in range(self.rows) if not self.locked[i, c]], default=self.rows-1)
-                row_min_c = min([j for j in range(self.cols) if not self.locked[r, j]], default=0)
-                row_max_c = max([j for j in range(self.cols) if not self.locked[r, j]], default=self.cols-1)
 
                 if is_locked:
                     lbl.configure(text="", fg_color="#121215", text_color="#333333") 
                 elif val in ARTIFACTS_DATA:
                     total_level = (self.levels[r, c] + score) * myst_mult
+                    tt_data = logic.get_tooltip_data(val, r, c, self.rows, self.cols, self.locked, self.calges_mapping, is_ignored, self.grid_data)
                     lvl_str = f" [Lv.{total_level}]" if total_level != 0 else ""
                     
-                    cond_msg = None
-                    cond = ARTIFACTS_DATA[val].get('cond')
-                    if cond and not is_ignored:
-                        if cond == 'bottom' and r != col_max_r: cond_msg = "error"
-                        if cond == 'top' and r != col_min_r: cond_msg = "error"
-                        if cond == 'edge' and (c != row_min_c and c != row_max_c): cond_msg = "error"
-                        if cond == 'inside' and (r == col_min_r or r == col_max_r or c == row_min_c or c == row_max_c): cond_msg = "error"
-                        if cond == 'both_empty':
-                            left_empty = (c == 0 or not self.grid_data[r, c-1])
-                            right_empty = (c == self.cols-1 or not self.grid_data[r, c+1])
-                            if not (left_empty and right_empty): cond_msg = "error"
-                    
-                    if cond_msg:
+                    if tt_data and "⚠" in tt_data[2] and not is_ignored:
                         lbl.configure(text=f"⚠\n{myst_prefix}{val}", fg_color="#7f1d1d", text_color="#fca5a5")
-                    elif is_ignored and cond:
+                    elif is_ignored and ARTIFACTS_DATA[val].get('cond'):
                         lbl.configure(text=f"✅제약무시\n{myst_prefix}{val}{lvl_str}", fg_color="#172554", text_color="#93c5fd")
                     else:
                         lbl.configure(text=f"{myst_prefix}{val}{lvl_str}", fg_color="#172554", text_color="#93c5fd")
-                        
                 elif val in SLABS_DATA:
                     rot_str = f"{self.rotations[r,c]*90}°"
-                    cond_msg = None
-                    s = SLABS_DATA[val]
-                    if s.get('cond') and not is_ignored:
-                        if s['cond'] == 'bottom' and r != col_max_r: cond_msg = "error"
-                        if s['cond'] == 'top' and r != col_min_r: cond_msg = "error"
-                        if s['cond'] == 'edge' and (c != row_min_c and c != row_max_c): cond_msg = "error"
-                        if s['cond'] == 'both_empty':
-                            left_empty = (c == 0 or not self.grid_data[r, c-1])
-                            right_empty = (c == self.cols-1 or not self.grid_data[r, c+1])
-                            if not (left_empty and right_empty): cond_msg = "error"
+                    tt_data = logic.get_tooltip_data(val, r, c, self.rows, self.cols, self.locked, self.calges_mapping, is_ignored, self.grid_data)
                     
-                    if cond_msg:
+                    if tt_data and "⚠" in tt_data[2] and not is_ignored:
                         lbl.configure(text=f"⚠\n{myst_prefix}{val}", fg_color="#7f1d1d", text_color="#fca5a5")
                     else:
                         lbl.configure(text=f"{myst_prefix}{val}\n{rot_str}", fg_color="#2d2a1b", text_color=THEME_GOLD)

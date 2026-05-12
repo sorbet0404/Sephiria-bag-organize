@@ -192,21 +192,20 @@ def get_offs(name, r, c, rot, rows, cols, locked=None):
             if col_min_r != col_max_r:
                 res.append({'dr': col_max_r - r, 'dc': nc - c, 'val': 1})
                 
-    # ── [핵심 수정] 반항, 전이, 응집에 회전 각도(actual_rot) 로직 적용 ──
-    elif off_type == 'diag_right': # 반항 석판
+    elif off_type == 'diag_right': 
         for d in range(1, max(rows, cols)):
-            if actual_rot % 2 == 0: # 기본, 180도: / 방향 (우상단, 좌하단)
+            if actual_rot % 2 == 0: 
                 if r - d >= 0 and c + d < cols: res.append({'dr': -d, 'dc': d, 'val': 1})
                 if r + d < rows and c - d >= 0: res.append({'dr': d, 'dc': -d, 'val': 1})
-            else: # 90도, 270도: \ 방향 (좌상단, 우하단)
+            else: 
                 if r - d >= 0 and c - d >= 0: res.append({'dr': -d, 'dc': -d, 'val': 1})
                 if r + d < rows and c + d < cols: res.append({'dr': d, 'dc': d, 'val': 1})
                 
-    elif off_type == 'cross_pm': # 전이 석판
-        if actual_rot % 2 == 0: # 기본, 180도: 가로줄은 +1, 세로줄은 -1
+    elif off_type == 'cross_pm': 
+        if actual_rot % 2 == 0: 
             res = [{'dr': 0, 'dc': nc - c, 'val': 1} for nc in range(cols) if nc != c]
             res += [{'dr': nr - r, 'dc': 0, 'val': -1} for nr in range(rows) if nr != r]
-        else: # 90도, 270도: 가로줄은 -1, 세로줄은 +1
+        else: 
             res = [{'dr': 0, 'dc': nc - c, 'val': -1} for nc in range(cols) if nc != c]
             res += [{'dr': nr - r, 'dc': 0, 'val': 1} for nr in range(rows) if nr != r]
             
@@ -214,14 +213,12 @@ def get_offs(name, r, c, rot, rows, cols, locked=None):
         res = [{'dr': 0, 'dc': nc - c, 'val': 1} for nc in range(cols) if nc != c]
         res += [{'dr': nr - r, 'dc': 0, 'val': 1} for nr in range(rows) if nr != r]
         
-    elif off_type == 'row_minus_up3': # 응집 석판
+    elif off_type == 'row_minus_up3': 
         if actual_rot % 2 == 0:
-            # 0도: 가로줄 -1, 위쪽 1칸 +3 / 180도: 가로줄 -1, 아래쪽 1칸 +3
             res = [{'dr': 0, 'dc': nc - c, 'val': -1} for nc in range(cols) if nc != c]
             target_r = r - 1 if actual_rot == 0 else r + 1
             if 0 <= target_r < rows: res.append({'dr': target_r - r, 'dc': 0, 'val': 3})
         else:
-            # 90도: 세로줄 -1, 오른쪽 1칸 +3 / 270도: 세로줄 -1, 왼쪽 1칸 +3
             res = [{'dr': nr - r, 'dc': 0, 'val': -1} for nr in range(rows) if nr != r]
             target_c = c + 1 if actual_rot == 1 else c - 1
             if 0 <= target_c < cols: res.append({'dr': 0, 'dc': target_c - c, 'val': 3})
@@ -262,16 +259,22 @@ def get_dynamic_sets(name, r, c, base_sets, calges_mapping=None):
     return base_sets
 
 def get_tooltip_data(name, r, c, rows, cols, locked=None, calges_mapping=None, is_ignored=False, grid_data=None):
+    is_slab = False
     item_data = ARTIFACTS_DATA.get(name)
-    if not item_data: return None
+    if not item_data:
+        item_data = SLABS_DATA.get(name)
+        is_slab = True
+        if not item_data: return None
 
     title = name
-    base_sets = item_data.get('sets', [])
-    dynamic_sets = get_dynamic_sets(name, r, c, base_sets, calges_mapping)
-    combo_text = "✨ " + ", ".join(dynamic_sets) if dynamic_sets else ""
+    combo_text = ""
+    if not is_slab:
+        base_sets = item_data.get('sets', [])
+        dynamic_sets = get_dynamic_sets(name, r, c, base_sets, calges_mapping)
+        combo_text = "✨ " + ", ".join(dynamic_sets) if dynamic_sets else ""
     
     grade = item_data.get('g', '일반')
-    grade_text = f"{grade} 아티팩트"
+    grade_text = f"{grade} 석판" if is_slab else f"{grade} 아티팩트"
     flavor_text = item_data.get('description', '')
 
     desc_lines = []
@@ -293,34 +296,34 @@ def get_tooltip_data(name, r, c, rows, cols, locked=None, calges_mapping=None, i
             if not (left_empty and right_empty):
                 desc_lines.append("⚠ 좌우 양쪽 칸이 모두 비어있어야 효과 발동")
 
-    effect = item_data.get('effect')
-    if effect: desc_lines.append(effect)
+    if not is_slab:
+        effect = item_data.get('effect')
+        if effect: desc_lines.append(effect)
 
-    if '행성' in dynamic_sets and grid_data is not None:
-        has_telescope = False
-        for dr in [-1, 0, 1]:
-            for dc in [-1, 0, 1]:
-                if dr == 0 and dc == 0: continue
-                nr, nc = r + dr, c + dc
-                if 0 <= nr < rows and 0 <= nc < cols:
-                    if grid_data[nr][nc] == '거대 망원경':
-                        has_telescope = True
-                        break
-            if has_telescope: break
-            
-        if has_telescope:
-            desc_lines.append("🔭 [거대 망원경 적용됨] 투사체 거대화 및 피해량 +50% 증가!")
+        if '행성' in dynamic_sets and grid_data is not None:
+            has_telescope = False
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    if dr == 0 and dc == 0: continue
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < rows and 0 <= nc < cols:
+                        if grid_data[nr][nc] == '거대 망원경':
+                            has_telescope = True
+                            break
+                if has_telescope: break
+            if has_telescope:
+                desc_lines.append("🔭 [거대 망원경 적용됨] 투사체 거대화 및 피해량 +50% 증가!")
 
-    if name == '하얀 종이' and grid_data is not None:
-        if c > 0 and c < cols - 1:
-            left_item = grid_data[r][c-1]
-            right_item = grid_data[r][c+1]
-            if left_item in ARTIFACTS_DATA and right_item in ARTIFACTS_DATA:
-                left_sets = get_dynamic_sets(left_item, r, c-1, ARTIFACTS_DATA[left_item].get('sets', []), calges_mapping)
-                right_sets = get_dynamic_sets(right_item, r, c+1, ARTIFACTS_DATA[right_item].get('sets', []), calges_mapping)
-                common_sets = set(left_sets) & set(right_sets)
-                if common_sets:
-                    desc_lines.append(f"📄 [하얀 종이 적용됨] {', '.join(common_sets)} 콤보 +1 증가!")
+        if name == '하얀 종이' and grid_data is not None:
+            if c > 0 and c < cols - 1:
+                left_item = grid_data[r][c-1]
+                right_item = grid_data[r][c+1]
+                if left_item in ARTIFACTS_DATA and right_item in ARTIFACTS_DATA:
+                    left_sets = get_dynamic_sets(left_item, r, c-1, ARTIFACTS_DATA[left_item].get('sets', []), calges_mapping)
+                    right_sets = get_dynamic_sets(right_item, r, c+1, ARTIFACTS_DATA[right_item].get('sets', []), calges_mapping)
+                    common_sets = set(left_sets) & set(right_sets)
+                    if common_sets:
+                        desc_lines.append(f"📄 [하얀 종이 적용됨] {', '.join(common_sets)} 콤보 +1 증가!")
 
     desc_text = "\n".join(desc_lines)
     return title, combo_text, desc_text, grade_text, flavor_text, grade
@@ -369,7 +372,6 @@ def calculate_active_combos(grid_data, rows, cols, combos_data, artifacts_data, 
                     active_effects[combo_name]["effects"].append(f"[{req_count}] {effect}")
     return active_effects
 
-# --- 알고리즘(Simulated Annealing) 파트 ---
 def evaluate_state(grid, rotations, current_levels, mystery_buffs, locked, rows, cols, build_priorities=None):
     score = 0
     penalty = 0
