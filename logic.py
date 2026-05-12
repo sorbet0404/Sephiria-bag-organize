@@ -5,7 +5,7 @@ import math
 from data import SLABS_DATA, ARTIFACTS_DATA
 
 # ──────────────────────────────────────────────
-# 빌드 우선순위 / 스탯 파싱
+# 빌드 우선순위 / 스탯 파싱 및 타격형 아티팩트 정의
 # ──────────────────────────────────────────────
 
 ALL_STATS = [
@@ -20,6 +20,13 @@ ALL_STATS = [
     '가시', '동료 부활 가속', '얼음무구 충전 속도', '무기 피해량',
     '소용돌이 피해', '협상력',
 ]
+
+DIRECT_ATTACK_ARTIFACTS = {
+    '노란 행성', '붉은 행성', '푸른 행성', '하얀 행성', '하늘색 행성', '암흑 행성', '잿빛 행성',
+    '차크람', '전격 차크람', '쿠나이', '팔라스의 카드', '얼어붙은 활',
+    '붉은 뱀의 눈', '볼루스파', '테로의 영혼 가루', '아마드의 영혼 가루', '헤이타의 영혼 가루',
+    '미니 발리스타', '금빛 핸드벨', '채굴작업 총괄 완장'
+}
 
 _STAT_PATTERNS = [
     (r'물리 피해', '물리 피해'),
@@ -73,6 +80,38 @@ _STAT_PATTERNS = [
 ]
 
 _stat_cache = {}
+_level_stat_cache = {}
+
+def get_artifact_level_stats(name):
+    if name in _level_stat_cache:
+        return _level_stat_cache[name]
+
+    item = ARTIFACTS_DATA.get(name)
+    if not item:
+        _level_stat_cache[name] = {}
+        return {}
+
+    result = {}
+    for line in item.get('effect', '').split('\n'):
+        if 'X' in line:
+            continue
+        matches = re.findall(r'([+-]?[\d.]+(?:/[\d.]+)+)', line)
+        for m in matches:
+            parts = m.split('/')
+            try:
+                values = [float(p) for p in parts]
+            except ValueError:
+                continue
+            if len(values) < 2:
+                continue
+            for pattern, stat_name in _STAT_PATTERNS:
+                if re.search(pattern, line):
+                    if stat_name not in result:
+                        result[stat_name] = values
+                    break
+
+    _level_stat_cache[name] = result
+    return result
 
 def _is_increasing(values_str):
     try:
@@ -82,7 +121,6 @@ def _is_increasing(values_str):
         return False
 
 def get_artifact_stats(name):
-    """아티팩트 effect에서 강화 시 증가하는 스탯 목록 반환 (캐싱)"""
     if name in _stat_cache:
         return _stat_cache[name]
     item = ARTIFACTS_DATA.get(name)
@@ -102,11 +140,6 @@ def get_artifact_stats(name):
     return found
 
 def calc_build_bonus(artifact_name, build_priorities):
-    """
-    build_priorities: {'1순위': '치명타 확률', '2순위': '공격 속도', '3순위': '물리 피해'}
-    1순위 매칭 → +3.0, 2순위 → +2.0, 3순위 → +1.0
-    아무것도 안 맞으면 → -0.5 (빌드 무관 아이템 가중치 하락)
-    """
     if not build_priorities:
         return 0.0
     stats = get_artifact_stats(artifact_name)
@@ -118,7 +151,6 @@ def calc_build_bonus(artifact_name, build_priorities):
     if not weights:
         return 0.0
     bonus = sum(weights[s] for s in stats if s in weights)
-    # 빌드와 전혀 무관한 아이템은 감점
     if bonus == 0.0 and stats:
         return -0.5
     return bonus
@@ -228,11 +260,15 @@ def get_tooltip_data(name, r, c, rows, cols, locked=None, calges_mapping=None, i
         if cond == 'top' and r != min_r: desc_lines.append("⚠ 최상단 행에만 배치 가능")
         if cond == 'edge' and (c != min_c and c != max_c): desc_lines.append("⚠ 좌끝 또는 우끝 열에만 배치 가능")
         if cond == 'inside' and (r == min_r or r == max_r or c == min_c or c == max_c): desc_lines.append("⚠ 인벤토리 안쪽에만 배치 가능")
+        if cond == 'both_empty':
+            left_empty = (c == 0 or (grid_data is not None and not grid_data[r][c-1]))
+            right_empty = (c == cols-1 or (grid_data is not None and not grid_data[r][c+1]))
+            if not (left_empty and right_empty):
+                desc_lines.append("⚠ 좌우 양쪽 칸이 모두 비어있어야 효과 발동")
 
     effect = item_data.get('effect')
     if effect: desc_lines.append(effect)
 
-    # 1. 거대 망원경 시너지 스캔
     if '행성' in dynamic_sets and grid_data is not None:
         has_telescope = False
         for dr in [-1, 0, 1]:
@@ -244,11 +280,9 @@ def get_tooltip_data(name, r, c, rows, cols, locked=None, calges_mapping=None, i
                         has_telescope = True
                         break
             if has_telescope: break
-            
         if has_telescope:
             desc_lines.append("🔭 [거대 망원경 적용됨] 투사체 거대화 및 피해량 +50% 증가!")
 
-    # 2. 하얀 종이 시너지 스캔
     if name == '하얀 종이' and grid_data is not None:
         if c > 0 and c < cols - 1:
             left_item = grid_data[r][c-1]
@@ -266,7 +300,6 @@ def get_tooltip_data(name, r, c, rows, cols, locked=None, calges_mapping=None, i
 def calculate_active_combos(grid_data, rows, cols, combos_data, artifacts_data, calges_mapping=None):
     set_counts = {}
     
-    # 1차 스캔: 아티팩트들의 기본 콤보 계산
     for r in range(rows):
         for c in range(cols):
             item_name = grid_data[r][c]
@@ -276,7 +309,6 @@ def calculate_active_combos(grid_data, rows, cols, combos_data, artifacts_data, 
                 for s in dynamic_sets:
                     set_counts[s] = set_counts.get(s, 0) + 1
 
-    # 2차 스캔: '하얀 종이' 콤보 보너스 계산
     for r in range(rows):
         for c in range(cols):
             if grid_data[r][c] == '하얀 종이':
@@ -287,8 +319,17 @@ def calculate_active_combos(grid_data, rows, cols, combos_data, artifacts_data, 
                         left_sets = get_dynamic_sets(left_item, r, c-1, artifacts_data[left_item].get('sets', []), calges_mapping)
                         right_sets = get_dynamic_sets(right_item, r, c+1, artifacts_data[right_item].get('sets', []), calges_mapping)
                         common_sets = set(left_sets) & set(right_sets)
-                        # 양옆에 공통된 콤보가 있으면 해당 콤보 수치 +1
                         for s in common_sets:
+                            set_counts[s] = set_counts.get(s, 0) + 1
+                            
+    for r in range(rows):
+        for c in range(cols):
+            if grid_data[r][c] == '북향의 금빛 침':
+                if r > 0:
+                    above_item = grid_data[r-1][c]
+                    if above_item in DIRECT_ATTACK_ARTIFACTS:
+                        above_sets = get_dynamic_sets(above_item, r-1, c, artifacts_data[above_item].get('sets', []), calges_mapping)
+                        for s in above_sets:
                             set_counts[s] = set_counts.get(s, 0) + 1
 
     active_effects = {}
@@ -301,7 +342,7 @@ def calculate_active_combos(grid_data, rows, cols, combos_data, artifacts_data, 
     return active_effects
 
 # --- 알고리즘(Simulated Annealing) 파트 ---
-def evaluate_state(grid, rotations, mystery_buffs, locked, rows, cols, build_priorities=None):
+def evaluate_state(grid, rotations, current_levels, mystery_buffs, locked, rows, cols, build_priorities=None):
     score = 0
     penalty = 0
     
@@ -341,16 +382,36 @@ def evaluate_state(grid, rotations, mystery_buffs, locked, rows, cols, build_pri
                     elif cond == 'top' and r != min_r: penalty += 1
                     elif cond == 'edge' and (c != min_c and c != max_c): penalty += 1
                     elif cond == 'inside' and (r == min_r or r == max_r or c == min_c or c == max_c): penalty += 1
+                    elif cond == 'both_empty':
+                        left_empty = (c == 0 or not grid[r, c-1])
+                        right_empty = (c == cols-1 or not grid[r, c+1])
+                        if not (left_empty and right_empty): penalty += 1
                     
             elif val in ARTIFACTS_DATA:
-                score += slab_buffs[r][c]
-                score += mystery_buffs[r, c]
+                # [수정됨] 신비 버프 여부에 따라 2배만 적용되도록 수정
+                myst_val = mystery_buffs[r, c]
+                myst_mult = 2 if myst_val > 0 else 1
                 
-                # 빌드 우선순위 가산/감산
+                base_lv = int(current_levels[r][c]) + slab_buffs[r][c]
+                total_lv = base_lv * myst_mult  # 2배 곱연산
+                
+                # 아티팩트의 최종 레벨을 점수에 반영
+                score += total_lv
+                
                 if build_priorities:
+                    level_stats = get_artifact_level_stats(val)
+                    weights = {}
+                    for rank, w in [('1순위', 3.0), ('2순위', 2.0), ('3순위', 1.0)]:
+                        v = build_priorities.get(rank)
+                        if v and v != '없음':
+                            weights[v] = w
+                    for stat_name, values in level_stats.items():
+                        if stat_name in weights:
+                            max_lv = len(values) - 1
+                            actual_lv = min(max(total_lv, 0), max_lv)
+                            score += values[actual_lv] * weights[stat_name]
+
                     build_bonus = calc_build_bonus(val, build_priorities)
-                    # 석판 강화값 1점당 빌드 보너스 배율로 적용
-                    # (강화값이 높을수록 빌드 관련 아이템이 더 좋은 자리 차지)
                     score += build_bonus * 10
                 
                 cond = ARTIFACTS_DATA[val].get('cond')
@@ -359,8 +420,11 @@ def evaluate_state(grid, rotations, mystery_buffs, locked, rows, cols, build_pri
                     elif cond == 'top' and r != min_r: penalty += 1
                     elif cond == 'edge' and (c != min_c and c != max_c): penalty += 1
                     elif cond == 'inside' and (r == min_r or r == max_r or c == min_c or c == max_c): penalty += 1
+                    elif cond == 'both_empty':
+                        left_empty = (c == 0 or not grid[r, c-1])
+                        right_empty = (c == cols-1 or not grid[r, c+1])
+                        if not (left_empty and right_empty): penalty += 1
                     
-                # 거대 망원경 배치 점수 가중치 (+500)
                 if val == '거대 망원경':
                     for dr in [-1, 0, 1]:
                         for dc in [-1, 0, 1]:
@@ -375,7 +439,12 @@ def evaluate_state(grid, rotations, mystery_buffs, locked, rows, cols, build_pri
                                     if '행성' in sets:
                                         score += 500 
 
-                # 하얀 종이 배치 점수 가중치 (+300)
+                if val == '북향의 금빛 침':
+                    if r > 0 and not locked[r-1, c]:
+                        above = grid[r-1, c]
+                        if above in DIRECT_ATTACK_ARTIFACTS:
+                            score += 300
+
                 if val == '하얀 종이':
                     if c > 0 and c < cols - 1:
                         left_item = grid[r, c-1]
@@ -396,7 +465,7 @@ def optimize_layout(initial_grid, initial_rotations, initial_levels, mystery_buf
     movable_pos = [(r, c) for r in range(rows) for c in range(cols) if not locked[r, c]]
     if len(movable_pos) < 2: return initial_grid.tolist(), initial_rotations.tolist(), initial_levels.tolist()
         
-    current_score = evaluate_state(current_grid, current_rotations, mystery_buffs, locked, rows, cols, build_priorities)
+    current_score = evaluate_state(current_grid, current_rotations, current_levels, mystery_buffs, locked, rows, cols, build_priorities)
     
     best_grid = current_grid.copy()
     best_rotations = current_rotations.copy()
@@ -428,7 +497,7 @@ def optimize_layout(initial_grid, initial_rotations, initial_levels, mystery_buf
                     next_rotations[r1, c1] = (next_rotations[r1, c1] + random.choice([1, 2, 3])) % 4
                 else: continue
                     
-            next_score = evaluate_state(next_grid, next_rotations, mystery_buffs, locked, rows, cols, build_priorities)
+            next_score = evaluate_state(next_grid, next_rotations, next_levels, mystery_buffs, locked, rows, cols, build_priorities)
             
             if next_score > current_score:
                 accept = True
